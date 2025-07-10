@@ -6,6 +6,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 # Load the dataset
 df = pd.read_csv('kc_house_data.csv')
@@ -76,3 +77,55 @@ sns.barplot(x="Importance", y="Feature", data=importance_df)
 plt.title("Feature Importance from Random Forest")
 plt.tight_layout()
 plt.show()
+
+
+#Feature Engineering the data
+df_fe =  pd.read_csv('kc_house_data.csv')
+
+#Using Time
+df_fe["date"] = pd.to_datetime(df_fe["date"])
+df_fe["year"] = df_fe["date"].dt.year
+df_fe["month"] = df_fe["date"].dt.month
+df_fe["house_age"] = df_fe["year"] - df_fe["yr_built"]
+df_fe.drop(columns=["date"], inplace=True)
+df_fe["price_per_sqft"] = df_fe["price"] / df_fe["sqft_living"]
+
+df_fe["waterfront"] = df_fe["waterfront"].apply(lambda x: 1 if x == 1 else 0)
+df_fe = pd.get_dummies(df_fe, columns=["view", "condition"], drop_first=True)
+
+#combining different features 
+df_fe["bed_bath_rooms"] = df_fe["bedrooms"] + df_fe["bathrooms"]
+df_fe["sqft_total"] = df_fe["sqft_living"] + df_fe["sqft_basement"]
+df_fe["bedrooms_per_room"] = df_fe["bedrooms"] / (df_fe["sqft_living"] + 1)
+
+#converting to log scale
+df_fe["log_price"] = np.log1p(df_fe["price"])
+df_fe["log_sqft_living"] = np.log1p(df_fe["sqft_living"])
+#converting into specific categories 
+df_fe["grade_cat"] = pd.cut(df_fe["grade"], bins=[0, 5, 8, 13], labels=["low", "medium", "high"])
+df_fe = pd.get_dummies(df_fe, columns=["grade_cat"], drop_first=True)
+#Bin square footage
+df_fe["sqft_bin"] = pd.qcut(df_fe["sqft_living"], q=4, labels=False)
+#getting rid of useless features
+df_fe.drop(columns=["id",  "price", "sqft_living", "yr_built"], inplace=True)
+
+#Scaling to make the numbers better
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df_fe.drop("log_price", axis=1))
+X = df_fe.drop("log_price", axis=1)
+y = df_fe["log_price"]
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+rf = RandomForestRegressor()
+rf.fit(X_train, y_train)
+
+
+preds = rf.predict(X_test)
+rmse = mean_squared_error(y_test, preds) ** 0.5
+r2 = r2_score(y_test, preds)
+
+print("RMSE:", rmse)
+print("R²:", r2)
